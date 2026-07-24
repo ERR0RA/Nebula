@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON_HEX // V3_FINAL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon: #ff00ff;
+            --neon-alt: #00ffff;
+            --bg: #020205;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: var(--bg); color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
+        }
+
+        #ui {
+            position: absolute; top: 30px; left: 30px; z-index: 10;
+            pointer-events: none;
+        }
+
+        .stat { margin-bottom: 10px; }
+        .label { font-size: 0.6rem; color: var(--neon-alt); letter-spacing: 2px; }
+        .value { font-size: 2.2rem; font-weight: 900; text-shadow: 0 0 20px var(--neon-alt); }
+
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 100;
+        }
+
+        h1 { font-size: 5rem; margin: 0; text-shadow: 0 0 30px var(--neon); color: var(--neon); letter-spacing: 10px; }
+        .msg { color: var(--neon-alt); margin: 20px 0; letter-spacing: 5px; font-size: 0.9rem; text-shadow: 0 0 10px var(--neon-alt); }
+        
+        .start-btn {
+            padding: 18px 60px; background: transparent; border: 3px solid var(--neon);
+            color: var(--neon); font-family: 'Orbitron'; font-weight: 900;
+            cursor: pointer; transition: 0.3s; letter-spacing: 5px;
+            box-shadow: inset 0 0 15px var(--neon);
+        }
+        .start-btn:hover { background: var(--neon); color: #000; box-shadow: 0 0 50px var(--neon); }
+
+        canvas { display: block; filter: contrast(1.2) brightness(1.2); }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="stat">
+            <div class="label">SYNC_INDEX</div>
+            <div id="score" class="value">0</div>
+        </div>
+        <div class="stat">
+            <div class="label">STABILITY</div>
+            <div id="health" class="value" style="color: var(--neon); text-shadow: 0 0 20px var(--neon);">100%</div>
+        </div>
+    </div>
+
+    <div id="overlay">
+        <h1 id="header">NEON_HEX</h1>
+        <div class="msg">ORBIT THE CORE // FIND THE GAP</div>
+        <button class="start-btn" onclick="startGame()">INIT_CORE</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const healthEl = document.getElementById('health');
+    const overlay = document.getElementById('overlay');
+    const header = document.getElementById('header');
+
+    let w, h;
+    function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let gameActive = false;
+    let score = 0;
+    let health = 100;
+    let playerAngle = 0;
+    const rotationSpeed = 0.1; 
+    let walls = [];
+    let frame = 0;
+    let wallSpeed = 5;
+    let spawnRate = 80;
+
+    class Wall {
+        constructor() {
+            this.dist = Math.max(w, h) * 0.7;
+            this.gapSize = 1.25; // Slightly larger for better feel
+            this.gapCenter = Math.random() * Math.PI * 2;
+            this.color = Math.random() > 0.5 ? '#ff00ff' : '#00ffff';
+            this.hitProcessed = false;
+        }
+
+        draw() {
+            ctx.shadowBlur = 30;
+            ctx.shadowColor = this.color;
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 15;
+            ctx.lineCap = "round"; // Rounded ends look more "neon"
+            ctx.beginPath();
+            // Important: drawing counter-clockwise to correctly leave the gap
+            ctx.arc(w/2, h/2, this.dist, this.gapCenter + (this.gapSize/2), this.gapCenter - (this.gapSize/2));
+            ctx.stroke();
+        }
+
+        update() {
+            this.dist -= wallSpeed;
+        }
+    }
+
+    function startGame() {
+        score = 0; health = 100; walls = []; frame = 0;
+        gameActive = true;
+        overlay.style.display = 'none';
+        header.style.color = "var(--neon)";
+        animate();
+    }
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function animate() {
+        if (!gameActive) return;
+
+        frame++;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(2, 2, 5, 0.4)';
+        ctx.fillRect(0, 0, w, h);
+
+        // Motion Grid
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        for(let x = (frame % 100); x < w; x += 100) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+        for(let y = (frame % 100); y < h; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+        ctx.globalCompositeOperation = 'screen';
+
+        if (keys['ArrowLeft'] || keys['KeyA']) playerAngle -= rotationSpeed;
+        if (keys['ArrowRight'] || keys['KeyD']) playerAngle += rotationSpeed;
+
+        // Player Orbit Radius
+        const orbitRadius = 80;
+        const px = w/2 + Math.cos(playerAngle) * orbitRadius;
+        const py = h/2 + Math.sin(playerAngle) * orbitRadius;
+        
+        ctx.shadowBlur = 40;
+        ctx.shadowColor = '#fff';
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(px, py, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (frame % Math.floor(spawnRate) === 0) walls.push(new Wall());
+
+        wallSpeed = 5 + (score / 2500);
+        spawnRate = Math.max(35, 80 - (score / 500));
+
+        for (let i = walls.length - 1; i >= 0; i--) {
+            let wall = walls[i];
+            wall.update();
+            wall.draw();
+
+            // Refined Collision logic
+            if (!wall.hitProcessed && wall.dist < (orbitRadius + 15) && wall.dist > (orbitRadius - 15)) {
+                
+                // Normalize player angle to 0 - 2PI
+                let normPlayer = ((playerAngle % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2);
+                let normGap = ((wall.gapCenter % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2);
+                
+                // Angular distance calculation
+                let angleDiff = Math.abs(normPlayer - normGap);
+                if (angleDiff > Math.PI) angleDiff = (Math.PI * 2) - angleDiff;
+
+                // Check if player is OUTSIDE the gap
+                if (angleDiff > (wall.gapSize / 2)) { 
+                    health -= 25;
+                    wall.hitProcessed = true; // Prevents double-damage from same wall
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.fillRect(0, 0, w, h);
+                }
+            }
+
+            if (wall.dist < 10) {
+                if (!wall.hitProcessed) score += 100;
+                walls.splice(i, 1);
+            }
+        }
+
+        scoreEl.innerText = score;
+        healthEl.innerText = health + "%";
+
+        if (health <= 0) {
+            gameActive = false;
+            header.innerText = "CORE_CRASHED";
+            header.style.color = "#ff3333";
+            overlay.style.display = 'flex';
+        } else {
+            requestAnimationFrame(animate);
+        }
+    }
+</script>
+</body>
+</html>
