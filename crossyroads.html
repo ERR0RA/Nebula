@@ -2,176 +2,1002 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLOCKY CROSSING: INFINITE</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Blocky Crossing: Infinite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
-        canvas { background: #4daa3d; border: 4px solid #fff; }
-        #ui { position: absolute; top: 20px; text-align: center; width: 100%; pointer-events: none; z-index: 5; }
-        #score { font-size: 50px; font-weight: 900; text-shadow: 3px 3px #000; }
-        #msg { position: absolute; background: rgba(0,0,0,0.9); padding: 30px; border: 3px solid #fff; display: none; text-align: center; z-index: 10; }
-        button { background: #fff; border: none; padding: 10px 20px; font-family: inherit; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=VT323&display=swap');
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111827;
+            touch-action: none; /* Prevent scroll on swipe */
+            font-family: 'Fredoka One', cursive;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #4daa3d; /* Base grass color */
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* UI Overlays */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .text-shadow { text-shadow: 2px 4px 0px rgba(0,0,0,0.5); }
+        .text-shadow-sm { text-shadow: 1px 2px 0px rgba(0,0,0,0.5); }
+
+        .btn-retro {
+            background: linear-gradient(to bottom, #4ade80, #16a34a);
+            box-shadow: 0 6px 0 #14532d, 0 8px 10px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+        .btn-retro:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #14532d, 0 4px 6px rgba(0,0,0,0.5);
+        }
+
+        /* Screen Shake Animation */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shake {
+            animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+        }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    <div id="score">0</div>
-    <div style="font-size: 12px; opacity: 0.7;">DISTANCE RECORD: <span id="best">0</span></div>
-</div>
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
 
-<div id="msg" id="deathScreen">
-    <h1 style="color: #ff4444; margin: 0;">SPLAT!</h1>
-    <p>YOU DRIFTED TOO FAR</p>
-    <button onclick="init()">RE-DEPLOY</button>
-</div>
+    <!-- In-Game HUD -->
+    <div id="hud" class="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none z-10 hidden">
+        <div class="text-white text-4xl text-shadow font-bold tracking-wider" id="scoreDisplay">0</div>
+        <div class="text-gray-200 text-xl text-shadow-sm flex flex-col items-end">
+            <span>TOP</span>
+            <span id="highScoreDisplay" class="text-yellow-400 font-bold">0</span>
+        </div>
+    </div>
 
-<canvas id="game"></canvas>
+    <!-- Main Menu -->
+    <div id="mainMenu" class="absolute inset-0 flex flex-col items-center justify-center z-20 transition-opacity duration-300">
+        <div class="glass-panel p-8 rounded-3xl text-center transform scale-100 hover:scale-105 transition-transform">
+            <h1 class="text-5xl md:text-7xl text-white font-black text-shadow mb-2 tracking-tight">BLOCKY<br><span class="text-green-400">CROSSING</span></h1>
+            <p class="text-gray-200 mb-8 font-sans font-semibold">Swipe or use Arrow Keys to hop!</p>
+            <button id="startBtn" class="btn-retro text-white text-2xl font-bold py-4 px-10 rounded-xl cursor-pointer pointer-events-auto">
+                TAP TO START
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverMenu" class="absolute inset-0 flex flex-col items-center justify-center z-30 hidden bg-black/60 backdrop-blur-sm">
+        <div class="glass-panel p-8 rounded-3xl text-center animate-bounce-short">
+            <h1 id="deathReason" class="text-4xl text-red-400 font-black text-shadow mb-4">SPLAT!</h1>
+            <div class="flex justify-center gap-8 mb-8">
+                <div class="text-center">
+                    <p class="text-gray-300 font-sans text-sm font-bold">SCORE</p>
+                    <p id="finalScore" class="text-5xl text-white text-shadow font-bold">0</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-gray-300 font-sans text-sm font-bold">BEST</p>
+                    <p id="finalBest" class="text-5xl text-yellow-400 text-shadow font-bold">0</p>
+                </div>
+            </div>
+            <button id="restartBtn" class="btn-retro text-white text-2xl font-bold py-4 px-10 rounded-xl cursor-pointer pointer-events-auto">
+                PLAY AGAIN
+            </button>
+        </div>
+    </div>
+</div>
 
 <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    const scoreEl = document.getElementById('score');
-    const bestEl = document.getElementById('best');
-    const msg = document.getElementById('msg');
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('game-container');
 
-    const GRID = 40;
-    const COLS = 10;
-    canvas.width = COLS * GRID;
-    canvas.height = 600;
+// UI Elements
+const ui = {
+    hud: document.getElementById('hud'),
+    mainMenu: document.getElementById('mainMenu'),
+    gameOverMenu: document.getElementById('gameOverMenu'),
+    score: document.getElementById('scoreDisplay'),
+    highScore: document.getElementById('highScoreDisplay'),
+    finalScore: document.getElementById('finalScore'),
+    finalBest: document.getElementById('finalBest'),
+    deathReason: document.getElementById('deathReason'),
+    startBtn: document.getElementById('startBtn'),
+    restartBtn: document.getElementById('restartBtn')
+};
 
-    let score = 0, highVal = 0, alive = true, cameraY = 0;
-    let rows = [], player = { x: 5, y: 10, offset: 0 };
+// Game Config & State
+const COLS = 11; // Always 11 columns for consistent gameplay width
+let GRID_SIZE = 50; 
+let scaleRatio = 1;
 
-    function init() {
-        score = 0; alive = true; cameraY = 0;
-        player.x = 4; player.y = 10; player.offset = 0;
-        rows = [];
-        msg.style.display = 'none';
-        for(let i=0; i<25; i++) addRow(i, i > 8);
-        requestAnimationFrame(draw);
+const STATE = {
+    MENU: 0,
+    PLAYING: 1,
+    GAMEOVER: 2
+};
+
+let gameState = STATE.MENU;
+let score = 0;
+let highScore = localStorage.getItem('blocky_highscore') || 0;
+let cameraY = 0;
+let lastTime = 0;
+let difficultyMultiplier = 1;
+
+ui.highScore.innerText = highScore;
+
+// Arrays to hold game objects
+let rows = [];
+let particles = [];
+let player = null;
+
+// Colors
+const COLORS = {
+    grass: ['#65a30d', '#4d7c0f'], // Light/Dark pattern
+    road: '#374151',
+    roadLine: '#9ca3af',
+    water: '#0ea5e9',
+    waterRipple: '#38bdf8',
+    rail: '#57534e',
+    train: '#ef4444',
+    log: '#78350f',
+    leaf: '#166534',
+    trunk: '#451a03'
+};
+
+const audio = {
+    synth: null,
+    noise: null,
+    initialized: false,
+    
+    init() {
+        if(this.initialized) return;
+        this.synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: "square" },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1 }
+        }).toDestination();
+        
+        this.noise = new Tone.NoiseSynth({
+            noise: { type: 'pink' },
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0 }
+        }).toDestination();
+
+        this.bass = new Tone.Synth({
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.05, decay: 0.2, sustain: 0.2, release: 1 }
+        }).toDestination();
+        
+        Tone.start();
+        this.initialized = true;
+    },
+    playHop() {
+        if(!this.initialized) return;
+        this.synth.triggerAttackRelease("C5", "32n");
+    },
+    playScore() {
+        if(!this.initialized) return;
+        this.synth.triggerAttackRelease(["E5", "G5", "C6"], "16n");
+    },
+    playSplash() {
+        if(!this.initialized) return;
+        this.noise.triggerAttackRelease("8n");
+        this.synth.triggerAttackRelease("G2", "8n");
+    },
+    playCrash() {
+        if(!this.initialized) return;
+        this.noise.envelope.decay = 0.5;
+        this.noise.triggerAttackRelease("4n");
+        this.bass.triggerAttackRelease("C2", "8n");
+    },
+    playWarning() {
+        if(!this.initialized) return;
+        this.synth.triggerAttackRelease("A5", "16n");
+    }
+};
+
+const input = {
+    up: false, down: false, left: false, right: false,
+    touchStartX: 0, touchStartY: 0,
+    reset() { this.up = this.down = this.left = this.right = false; }
+};
+
+window.addEventListener('keydown', (e) => {
+    if (gameState !== STATE.PLAYING) return;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') input.up = true;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') input.down = true;
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = true;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = true;
+});
+
+// Touch controls (Swipe to move)
+window.addEventListener('touchstart', (e) => {
+    input.touchStartX = e.changedTouches[0].screenX;
+    input.touchStartY = e.changedTouches[0].screenY;
+}, {passive: false});
+
+window.addEventListener('touchend', (e) => {
+    if (gameState !== STATE.PLAYING) return;
+    let touchEndX = e.changedTouches[0].screenX;
+    let touchEndY = e.changedTouches[0].screenY;
+    
+    let dx = touchEndX - input.touchStartX;
+    let dy = touchEndY - input.touchStartY;
+    
+    // Tap to jump forward, swipe for directions
+    if (Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+        input.up = true; // Simple tap = forward
+    } else {
+        if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 30) input.right = true;
+            else if (dx < -30) input.left = true;
+        } else {
+            if (dy > 30) input.down = true;
+            else if (dy < -30) input.up = true;
+        }
+    }
+}, {passive: false});
+
+// Prevent default scrolling on canvas touch
+canvas.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    // Calculate grid size to fit COLS within the width, with a max size for desktop
+    GRID_SIZE = Math.min(Math.floor(canvas.width / COLS), 80); 
+    if(GRID_SIZE < 30) GRID_SIZE = 30; // Min size
+
+    // Re-center horizontally
+    ctx.translate(Math.floor((canvas.width - (COLS * GRID_SIZE)) / 2), 0);
+}
+window.addEventListener('resize', resize);
+
+function drawCube(x, y, w, h, zHeight, color, topColor, isRound=false) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    if(isRound) roundRect(0, h/2, w, h/2, 4, true, false);
+    else ctx.fillRect(0, h - zHeight, w, zHeight);
+
+    // Front Face (Darker)
+    ctx.fillStyle = color;
+    if(isRound) roundRect(0, -zHeight, w, h, 8, true, false);
+    else ctx.fillRect(0, -zHeight, w, h);
+    
+    // Top Face (Lighter)
+    ctx.fillStyle = topColor;
+    if(isRound) roundRect(0, -zHeight, w, h - (h*0.3), 8, true, false);
+    else ctx.fillRect(0, -zHeight, w, h - (h*0.4));
+
+    ctx.restore();
+}
+
+function roundRect(x, y, width, height, radius, fill, stroke) {
+    if (typeof stroke === 'undefined') stroke = true;
+    if (typeof radius === 'undefined') radius = 5;
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+    if (fill) ctx.fill();
+    if (stroke) ctx.stroke();
+}
+
+class Particle {
+    constructor(x, y, color, type) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.type = type; // 'explosion' or 'splash'
+        this.life = 1.0;
+        this.decay = Math.random() * 0.02 + 0.02;
+        
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 3 + 1;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.vz = Math.random() * 4 + 2; // Z-axis velocity
+        this.z = 0;
+        this.size = Math.random() * (GRID_SIZE*0.3) + 4;
     }
 
-    function addRow(y, isSafe) {
-        let type = 'grass';
-        if(!isSafe) {
-            const r = Math.random();
-            if(r > 0.7) type = 'road';
-            else if(r > 0.4) type = 'water';
-            else if(r > 0.25) type = 'rail';
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.z += this.vz;
+        this.vz -= 0.2; // Gravity
+        if(this.z < 0) {
+            this.z = 0;
+            this.vz *= -0.5; // Bounce
+            this.vx *= 0.8;
+            this.vy *= 0.8;
         }
-        
-        const row = {
-            y: y,
-            type: type,
-            entities: [],
-            speed: (Math.random() * 1.5 + 1) * (Math.random() > 0.5 ? 1 : -1)
-        };
+        this.life -= this.decay;
+    }
 
-        if(type !== 'grass') {
-            const count = type === 'rail' ? 1 : 3;
-            for(let i=0; i<count; i++) {
-                row.entities.push({ x: i * (canvas.width/count), w: type === 'water' ? 100 : 60 });
+    draw() {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        if(this.type === 'splash') {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y - this.z, this.size/2, 0, Math.PI*2);
+            ctx.fill();
+        } else {
+            ctx.fillRect(this.x - this.size/2, this.y - this.z - this.size/2, this.size, this.size);
+        }
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+function spawnParticles(x, y, color, type, count) {
+    for(let i=0; i<count; i++) {
+        particles.push(new Particle(x, y, color, type));
+    }
+}
+
+function triggerShake() {
+    container.classList.remove('shake');
+    void container.offsetWidth; // trigger reflow
+    container.classList.add('shake');
+}
+
+class Player {
+    constructor() {
+        this.gridX = Math.floor(COLS / 2);
+        this.gridY = 0;
+        this.x = this.gridX * GRID_SIZE;
+        this.y = this.gridY * GRID_SIZE;
+        this.z = 0;
+        this.size = GRID_SIZE * 0.7;
+        
+        // Animation
+        this.isMoving = false;
+        this.moveTimer = 0;
+        this.moveDuration = 0.15; // seconds
+        this.startX = this.x;
+        this.startY = this.y;
+        this.targetX = this.x;
+        this.targetY = this.y;
+        this.dir = 'up'; // facing direction
+        
+        this.state = 'alive'; // alive, splat, drown
+        this.onLog = null;
+    }
+
+    move(dx, dy) {
+        if(this.isMoving || this.state !== 'alive') return;
+        
+        let nextGridX = this.gridX + dx;
+        let nextGridY = this.gridY + dy;
+        
+        // Bounds check horizontally
+        if(nextGridX < 0 || nextGridX >= COLS) return;
+        
+        // Backwards restriction (don't go too far back off camera)
+        let visualY = nextGridY * GRID_SIZE;
+        if(visualY > cameraY + canvas.height - GRID_SIZE) return;
+
+        // Tree Collision Check
+        let targetRow = rows.find(r => r.y === nextGridY);
+        if(targetRow && targetRow.type === 'grass') {
+            let hitTree = targetRow.obstacles.some(obs => Math.abs(obs.x - nextGridX * GRID_SIZE) < 5);
+            if(hitTree) return; // Blocked
+        }
+
+        // Initiate move
+        this.gridX = nextGridX;
+        this.gridY = nextGridY;
+        this.startX = this.x;
+        this.startY = this.y;
+        this.targetX = this.gridX * GRID_SIZE;
+        this.targetY = this.gridY * GRID_SIZE;
+        
+        if(dx > 0) this.dir = 'right';
+        else if (dx < 0) this.dir = 'left';
+        else if (dy > 0) this.dir = 'down';
+        else if (dy < 0) this.dir = 'up';
+
+        this.isMoving = true;
+        this.moveTimer = 0;
+        this.onLog = null; // Detach from log on intentional move
+        
+        audio.playHop();
+
+        // Score update
+        let scoreGain = Math.max(0, -this.gridY);
+        if(scoreGain > score) {
+            score = scoreGain;
+            ui.score.innerText = score;
+            if(score % 10 === 0) {
+                audio.playScore();
+                difficultyMultiplier += 0.05; // Slightly faster over time
             }
         }
-        rows.push(row);
     }
 
-    window.addEventListener('keydown', e => {
-        if(!alive) return;
-        if(e.code === 'ArrowUp' || e.code === 'KeyW') { player.y--; score = Math.max(score, 10 - player.y); }
-        if(e.code === 'ArrowDown' || e.code === 'KeyS') player.y++;
-        if(e.code === 'ArrowLeft' || e.code === 'KeyA') player.x--;
-        if(e.code === 'ArrowRight' || e.code === 'KeyD') player.x++;
-        player.offset = 0; // Reset offset on manual move
+    update(dt) {
+        if(this.state !== 'alive') return;
+
+        // Ride Log Logic
+        if(this.onLog && !this.isMoving) {
+            this.x += this.onLog.speed * dt;
+            this.targetX = this.x;
+            this.startX = this.x;
+            // Update logical grid X based on actual X to allow jumping off properly
+            this.gridX = Math.round(this.x / GRID_SIZE);
+            
+            // Log off-screen death
+            if(this.x < -GRID_SIZE || this.x > canvas.width) {
+                this.die('drown');
+                return;
+            }
+        }
+
+        if(this.isMoving) {
+            this.moveTimer += dt;
+            let t = Math.min(1, this.moveTimer / this.moveDuration);
+            
+            // Easing (sine)
+            let ease = Math.sin(t * Math.PI / 2);
+            
+            this.x = this.startX + (this.targetX - this.startX) * ease;
+            this.y = this.startY + (this.targetY - this.startY) * ease;
+            
+            // Hop arc (parabola)
+            this.z = Math.sin(t * Math.PI) * (GRID_SIZE * 0.6);
+
+            if(t >= 1) {
+                this.isMoving = false;
+                this.z = 0;
+                this.x = this.targetX;
+                this.y = this.targetY;
+                this.checkCollisions();
+            }
+        } else {
+             // Constantly check collisions if standing still (for sweeping logs/cars)
+             this.checkCollisions();
+        }
+
+        // Eagle/Camera death (falling behind)
+        if(this.y > cameraY + canvas.height) {
+            this.die('splat');
+            ui.deathReason.innerText = "LEFT BEHIND!";
+        }
+    }
+
+    checkCollisions() {
+        if(this.state !== 'alive') return;
+        
+        let row = rows.find(r => r.y === this.gridY);
+        if(!row) return;
+
+        let cx = this.x + GRID_SIZE/2; // Center of player
+        
+        if(row.type === 'road' || row.type === 'rail') {
+            for(let obs of row.obstacles) {
+                // Simple AABB overlap
+                if(cx > obs.x && cx < obs.x + obs.w) {
+                    this.die('splat');
+                    return;
+                }
+            }
+        } else if (row.type === 'water') {
+            let safe = false;
+            for(let obs of row.obstacles) {
+                if(cx > obs.x && cx < obs.x + obs.w) {
+                    safe = true;
+                    this.onLog = obs;
+                    break;
+                }
+            }
+            if(!safe && !this.isMoving) { // Only drown if finished moving
+                this.die('drown');
+            }
+        }
+    }
+
+    die(type) {
+        this.state = type;
+        if(type === 'splat') {
+            audio.playCrash();
+            spawnParticles(this.x + GRID_SIZE/2, this.y + GRID_SIZE/2, '#ffffff', 'explosion', 20);
+            spawnParticles(this.x + GRID_SIZE/2, this.y + GRID_SIZE/2, '#ef4444', 'explosion', 10); // Comb/blood
+            triggerShake();
+            ui.deathReason.innerText = "SPLAT!";
+        } else if (type === 'drown') {
+            audio.playSplash();
+            spawnParticles(this.x + GRID_SIZE/2, this.y + GRID_SIZE/2, '#38bdf8', 'splash', 30);
+            ui.deathReason.innerText = "GLUB GLUB...";
+        }
+        
+        setTimeout(() => gameOver(), 800);
+    }
+
+    draw() {
+        if(this.state === 'splat') return; // Hide body on splat
+
+        ctx.save();
+        ctx.translate(this.x + GRID_SIZE/2, this.y + GRID_SIZE/2 - this.z);
+        
+        if(this.state === 'drown') {
+            // Sinking effect
+            ctx.globalAlpha = 0.5;
+            ctx.scale(0.8, 0.8);
+            ctx.translate(0, GRID_SIZE/2);
+        }
+
+        // Squash & Stretch based on Z velocity (approximation)
+        let scaleX = 1, scaleY = 1;
+        if(this.isMoving) {
+            scaleY = 1 + (this.z / (GRID_SIZE*2));
+            scaleX = 1 / scaleY;
+            if(this.dir === 'left' || this.dir === 'right') {
+                [scaleX, scaleY] = [scaleY, scaleX]; // swap squash axis based on dir
+            }
+        }
+        ctx.scale(scaleX, scaleY);
+
+        let w = this.size, h = this.size;
+        
+        // Shadow (drawn on floor)
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(0, this.z + h/2, w/2, w/4, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        // Chicken Body
+        ctx.fillStyle = '#ffffff';
+        roundRect(-w/2, -h/2, w, h, 6, true, false);
+        
+        // Details based on direction
+        ctx.fillStyle = '#000'; // Eyes
+        let eyeOff = w/5;
+        if(this.dir === 'up') {
+            // Back of head, no face
+        } else if (this.dir === 'down') {
+            ctx.fillRect(-eyeOff*1.5, -h/4, 4, 4);
+            ctx.fillRect(eyeOff*1.5 - 4, -h/4, 4, 4);
+            // Beak
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.moveTo(-4, -h/8);
+            ctx.lineTo(4, -h/8);
+            ctx.lineTo(0, h/8);
+            ctx.fill();
+        } else if (this.dir === 'right') {
+            ctx.fillRect(eyeOff, -h/4, 4, 4);
+            // Beak
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.moveTo(w/2, -h/8);
+            ctx.lineTo(w/2+8, -h/16);
+            ctx.lineTo(w/2, h/16);
+            ctx.fill();
+        } else if (this.dir === 'left') {
+            ctx.fillRect(-eyeOff-4, -h/4, 4, 4);
+            // Beak
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.moveTo(-w/2, -h/8);
+            ctx.lineTo(-w/2-8, -h/16);
+            ctx.lineTo(-w/2, h/16);
+            ctx.fill();
+        }
+
+        // Comb (Red thing on top)
+        ctx.fillStyle = '#ef4444';
+        roundRect(-4, -h/2 - 6, 8, 8, 3, true, false);
+
+        ctx.restore();
+    }
+}
+
+class Row {
+    constructor(y, type) {
+        this.y = y;
+        this.type = type; // 'grass', 'road', 'water', 'rail'
+        this.obstacles = [];
+        this.speed = 0;
+        this.direction = Math.random() > 0.5 ? 1 : -1;
+        this.pattern = (Math.abs(y) % 2 === 0) ? 0 : 1; // For checkerboard grass
+        
+        // Train specific
+        this.isTrainActive = false;
+        this.trainTimer = Math.random() * 5 + 2; // initial wait
+        this.warningPhase = false;
+
+        this.generate();
+    }
+
+    generate() {
+        if(this.type === 'grass') {
+            // Generate random trees, ensuring a path exists
+            for(let i=0; i<COLS; i++) {
+                if(i === Math.floor(COLS/2) && this.y === 0) continue; // Spawn area clear
+                if(Math.random() > 0.75) {
+                    this.obstacles.push({ x: i * GRID_SIZE, w: GRID_SIZE, type: 'tree' });
+                }
+            }
+        } else if (this.type === 'road') {
+            let speeds = [60, 90, 120, 150];
+            this.speed = speeds[Math.floor(Math.random()*speeds.length)] * difficultyMultiplier;
+            let numCars = Math.random() > 0.5 ? 2 : 3;
+            let spacing = (COLS * GRID_SIZE) / numCars;
+            let startOffset = Math.random() * spacing;
+            
+            for(let i=0; i<numCars; i++) {
+                let carType = Math.floor(Math.random()*3); // diff colors/lengths
+                let width = carType === 2 ? GRID_SIZE * 1.8 : GRID_SIZE * 1.2;
+                this.obstacles.push({
+                    x: startOffset + i * spacing,
+                    w: width,
+                    color: ['#ef4444', '#3b82f6', '#f59e0b', '#f9fafb'][Math.floor(Math.random()*4)]
+                });
+            }
+        } else if (this.type === 'water') {
+            let speeds = [40, 60, 80];
+            this.speed = speeds[Math.floor(Math.random()*speeds.length)] * difficultyMultiplier;
+            let numLogs = Math.random() > 0.5 ? 2 : 3;
+            let spacing = (COLS * GRID_SIZE) / numLogs;
+            let startOffset = Math.random() * spacing;
+            
+            for(let i=0; i<numLogs; i++) {
+                let length = Math.random() > 0.5 ? GRID_SIZE * 2.5 : GRID_SIZE * 3.5;
+                this.obstacles.push({
+                    x: startOffset + i * spacing,
+                    w: length
+                });
+            }
+        } else if (this.type === 'rail') {
+            this.speed = 800 * difficultyMultiplier; // Trains are FAST
+        }
+    }
+
+    update(dt) {
+        if (this.type === 'road' || this.type === 'water') {
+            for(let obs of this.obstacles) {
+                obs.x += this.speed * this.direction * dt;
+                
+                // Wrap around
+                let rowWidth = COLS * GRID_SIZE;
+                if(this.direction === 1 && obs.x > rowWidth) obs.x = -obs.w;
+                else if (this.direction === -1 && obs.x < -obs.w) obs.x = rowWidth;
+            }
+        } else if (this.type === 'rail') {
+            this.trainTimer -= dt;
+            
+            if(this.trainTimer <= 0 && !this.isTrainActive && !this.warningPhase) {
+                this.warningPhase = true;
+                this.trainTimer = 1.5; // Warning duration
+                audio.playWarning();
+            } else if (this.warningPhase && this.trainTimer <= 0) {
+                this.warningPhase = false;
+                this.isTrainActive = true;
+                this.obstacles = [{ x: this.direction === 1 ? -GRID_SIZE*10 : COLS*GRID_SIZE, w: GRID_SIZE * 10, type: 'train' }];
+                triggerShake(); // Big train rumble
+            }
+            
+            if(this.isTrainActive) {
+                let train = this.obstacles[0];
+                train.x += this.speed * this.direction * dt;
+                
+                if((this.direction === 1 && train.x > COLS*GRID_SIZE) || 
+                   (this.direction === -1 && train.x < -train.w)) {
+                    this.isTrainActive = false;
+                    this.obstacles = [];
+                    this.trainTimer = Math.random() * 4 + 3; // Reset train wait
+                }
+            }
+        }
+    }
+
+    draw() {
+        let py = this.y * GRID_SIZE;
+        let rowWidth = COLS * GRID_SIZE;
+
+        // Base ground
+        ctx.fillStyle = COLORS[this.type] || '#000';
+        if(this.type === 'grass') {
+            ctx.fillStyle = COLORS.grass[this.pattern];
+            ctx.fillRect(0, py, rowWidth, GRID_SIZE);
+        } else if (this.type === 'road') {
+            ctx.fillRect(0, py, rowWidth, GRID_SIZE);
+            // Dashed lines
+            ctx.fillStyle = COLORS.roadLine;
+            for(let i=0; i<rowWidth; i+=GRID_SIZE) {
+                ctx.fillRect(i + GRID_SIZE/4, py + GRID_SIZE/2 - 2, GRID_SIZE/2, 4);
+            }
+        } else if (this.type === 'water') {
+            ctx.fillRect(0, py, rowWidth, GRID_SIZE);
+            // Simple ripple animation based on time
+            ctx.fillStyle = COLORS.waterRipple;
+            let offset = (Date.now() / 50) % 20;
+            ctx.fillRect(0 + offset, py + GRID_SIZE/4, rowWidth/2, 2);
+            ctx.fillRect(rowWidth/2 + offset, py + GRID_SIZE*0.75, rowWidth/2, 2);
+        } else if (this.type === 'rail') {
+            ctx.fillStyle = COLORS.grass[0];
+            ctx.fillRect(0, py, rowWidth, GRID_SIZE);
+            // Tracks
+            ctx.fillStyle = '#a8a29e'; // Gravel
+            ctx.fillRect(0, py + GRID_SIZE*0.2, rowWidth, GRID_SIZE*0.6);
+            ctx.fillStyle = COLORS.rail;
+            ctx.fillRect(0, py + GRID_SIZE*0.3, rowWidth, 4);
+            ctx.fillRect(0, py + GRID_SIZE*0.7 - 4, rowWidth, 4);
+            // Ties
+            ctx.fillStyle = '#451a03';
+            for(let i=0; i<rowWidth; i+=GRID_SIZE/2) {
+                ctx.fillRect(i, py + GRID_SIZE*0.25, 8, GRID_SIZE*0.5);
+            }
+            
+            // Warning lights
+            if(this.warningPhase) {
+                let flash = Math.floor(Date.now() / 200) % 2 === 0;
+                ctx.fillStyle = flash ? '#ef4444' : '#7f1d1d';
+                ctx.beginPath();
+                ctx.arc(GRID_SIZE/2, py + GRID_SIZE/2, 6, 0, Math.PI*2);
+                ctx.arc(rowWidth - GRID_SIZE/2, py + GRID_SIZE/2, 6, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+
+        // Obstacles (drawn back to front is handled by row order, but entities within row drawn left to right)
+        for(let obs of this.obstacles) {
+            let px = obs.x;
+            if(this.type === 'grass' && obs.type === 'tree') {
+                // Tree Trunk
+                drawCube(px + GRID_SIZE*0.3, py + GRID_SIZE*0.4, GRID_SIZE*0.4, GRID_SIZE*0.6, GRID_SIZE*0.2, COLORS.trunk, '#78350f');
+                // Tree Leaves
+                drawCube(px + GRID_SIZE*0.1, py - GRID_SIZE*0.2, GRID_SIZE*0.8, GRID_SIZE*0.8, GRID_SIZE*0.8, COLORS.leaf, '#22c55e', true);
+            } else if (this.type === 'road') {
+                // Car
+                let h = GRID_SIZE * 0.7;
+                let cy = py + (GRID_SIZE - h)/2;
+                drawCube(px, cy, obs.w, h, h*0.6, obs.color, '#fff', true);
+                
+                // Headlights/Taillights
+                ctx.fillStyle = this.direction === 1 ? '#fef08a' : '#ef4444'; // Front or Back depending on travel dir
+                let lightX = this.direction === 1 ? px + obs.w - 4 : px;
+                ctx.fillRect(lightX, cy + 4, 4, 6);
+                ctx.fillRect(lightX, cy + h - 10, 4, 6);
+                
+                // Windshield
+                ctx.fillStyle = '#1f2937';
+                let glassX = this.direction === 1 ? px + obs.w*0.6 : px + obs.w*0.2;
+                ctx.fillRect(glassX, cy + 2 - h*0.6, obs.w*0.2, h-4);
+
+            } else if (this.type === 'water') {
+                // Log
+                let h = GRID_SIZE * 0.6;
+                let cy = py + (GRID_SIZE - h)/2;
+                drawCube(px, cy, obs.w, h, h*0.4, COLORS.log, '#b45309');
+            } else if (this.type === 'rail' && obs.type === 'train') {
+                let h = GRID_SIZE * 0.9;
+                let cy = py + (GRID_SIZE - h)/2;
+                drawCube(px, cy, obs.w, h, h*1.2, COLORS.train, '#fca5a5');
+                // Windows
+                ctx.fillStyle = '#38bdf8';
+                for(let i=10; i<obs.w-20; i+=30) {
+                    ctx.fillRect(px + i, cy + 4 - h*1.2, 20, 15);
+                }
+            }
+        }
+    }
+}
+
+function initGame() {
+    audio.init(); // Must be called after user interaction
+    gameState = STATE.PLAYING;
+    score = 0;
+    difficultyMultiplier = 1;
+    ui.score.innerText = '0';
+    ui.mainMenu.classList.add('hidden');
+    ui.gameOverMenu.classList.add('hidden');
+    ui.hud.classList.remove('hidden');
+
+    player = new Player();
+    rows = [];
+    particles = [];
+    cameraY = -GRID_SIZE * 3; // Start camera a bit lower
+
+    // Initial safe zone
+    for(let i=0; i>=-15; i--) {
+        generateRow(i, i >= -3); // First few rows are safe grass
+    }
+
+    input.reset();
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
+function generateRow(yIndex, forceSafe = false) {
+    let type = 'grass';
+    if(!forceSafe) {
+        let r = Math.random();
+        if(r > 0.6) type = 'road';
+        else if (r > 0.35) type = 'water';
+        else if (r > 0.2) type = 'rail';
+    }
+    
+    // Prevent too many consecutive non-grass rows (give player a break)
+    let nonGrassCount = 0;
+    for(let i=rows.length-1; i>=0; i--) {
+        if(rows[i].type !== 'grass') nonGrassCount++;
+        else break;
+    }
+    if(nonGrassCount > 4) type = 'grass';
+
+    rows.push(new Row(yIndex, type));
+}
+
+function gameOver() {
+    gameState = STATE.GAMEOVER;
+    if(score > highScore) {
+        highScore = score;
+        localStorage.setItem('blocky_highscore', highScore);
+        ui.highScore.innerText = highScore;
+    }
+    
+    ui.finalScore.innerText = score;
+    ui.finalBest.innerText = highScore;
+    ui.hud.classList.add('hidden');
+    ui.gameOverMenu.classList.remove('hidden');
+}
+
+function gameLoop(time) {
+    if (gameState !== STATE.PLAYING && gameState !== STATE.GAMEOVER) return;
+    
+    let dt = (time - lastTime) / 1000;
+    lastTime = time;
+    if(dt > 0.1) dt = 0.1; // Cap delta time to prevent huge jumps if tab inactive
+
+    update(dt);
+    draw();
+
+    if(gameState === STATE.PLAYING || particles.length > 0) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function update(dt) {
+    if(gameState === STATE.PLAYING) {
+        // Process Input
+        if(input.up) player.move(0, -1);
+        if(input.down) player.move(0, 1);
+        if(input.left) player.move(-1, 0);
+        if(input.right) player.move(1, 0);
+        input.reset();
+
+        player.update(dt);
+
+        // Smooth Camera follow (target slightly ahead of player)
+        let targetCameraY = player.y - canvas.height*0.6;
+        // Camera only moves up (forward), never backwards
+        if(targetCameraY < cameraY) {
+             cameraY += (targetCameraY - cameraY) * 5 * dt;
+        }
+
+        // Manage Rows (Infinite generation)
+        let visibleTopGrid = Math.floor(cameraY / GRID_SIZE) - 5;
+        let highestRowY = rows[rows.length-1].y;
+        
+        if(highestRowY > visibleTopGrid) {
+            generateRow(highestRowY - 1);
+        }
+
+        // Clean up old rows behind camera
+        let visibleBottomGrid = Math.floor((cameraY + canvas.height) / GRID_SIZE) + 2;
+        rows = rows.filter(r => r.y <= visibleBottomGrid);
+    }
+
+    // Update Entities & Particles
+    rows.forEach(r => r.update(dt));
+    particles.forEach(p => p.update());
+    particles = particles.filter(p => p.life > 0);
+}
+
+function draw() {
+    // Clear & setup camera
+    ctx.fillStyle = '#4daa3d';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    
+    // Translation logic:
+    // 1. Center horizontally (handled in resize())
+    // 2. Move camera Y
+    ctx.translate(Math.floor((canvas.width - (COLS * GRID_SIZE)) / 2), -cameraY);
+
+    // Draw rows from top of screen to bottom to handle z-index overlapping correctly
+    // Since y is negative going forward, higher y values are visually lower on screen.
+    // Sort rows by Y descending (lowest y / furthest away drawn first)
+    let sortedRows = [...rows].sort((a,b) => b.y - a.y);
+    
+    // We must interleave the player drawing with the rows so they stand behind/in front of trees correctly.
+    let playerDrawn = false;
+
+    sortedRows.forEach(row => {
+        // Draw row and its contents
+        row.draw();
+        
+        // Draw player if they belong to this row's depth
+        if(player && !playerDrawn && player.gridY >= row.y) {
+            player.draw();
+            playerDrawn = true;
+        }
     });
 
-    function update() {
-        if(!alive) return;
+    // Fallback if player wasn't drawn
+    if(player && !playerDrawn) player.draw();
 
-        cameraY += ((player.y - 8) * GRID - cameraY) * 0.1;
+    // Draw Particles on top
+    particles.forEach(p => p.draw());
 
-        if(rows[0].y * GRID < cameraY - GRID) {
-            const nextY = rows[rows.length-1].y + 1;
-            rows.shift();
-            addRow(nextY, false);
-        }
+    // Faux Vignette overlay for visual depth at top/bottom of screen
+    ctx.restore(); // reset transforms to draw HUD/Overlay fixed to screen
+    let grad = ctx.createLinearGradient(0,0,0,canvas.height);
+    grad.addColorStop(0, 'rgba(0,0,0,0.5)');
+    grad.addColorStop(0.1, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.9, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.8)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+}
 
-        let onLog = false;
-        rows.forEach(row => {
-            if(row.type === 'grass') return;
+ui.startBtn.addEventListener('click', initGame);
+ui.restartBtn.addEventListener('click', initGame);
 
-            const isRail = row.type === 'rail';
-            const s = isRail ? row.speed * 6 : row.speed;
+// Initial setup
+resize();
+// Draw a static initial frame for the background of the menu
+generateRow(0, true);
+generateRow(-1, true);
+generateRow(-2, false);
+generateRow(-3, false);
+generateRow(-4, false);
+draw();
 
-            row.entities.forEach(en => {
-                en.x += s;
-                if(en.x > canvas.width) en.x = -en.w;
-                if(en.x < -en.w) en.x = canvas.width;
-
-                // Collision Logic
-                if(player.y === row.y) {
-                    const px = player.x * GRID + player.offset;
-                    if(px + 5 < en.x + en.w && px + GRID - 5 > en.x) {
-                        if(row.type === 'water') {
-                            onLog = true;
-                            player.offset += s; // Drag player with log
-                        } else {
-                            die();
-                        }
-                    }
-                }
-            });
-
-            if(player.y === row.y && row.type === 'water' && !onLog) die();
-        });
-
-        // Bounds Check
-        const finalX = player.x * GRID + player.offset;
-        if(finalX < -10 || finalX > canvas.width - 20) die();
-        
-        scoreEl.innerText = score;
-    }
-
-    function die() {
-        if(!alive) return;
-        alive = false;
-        msg.style.display = 'block';
-        highVal = Math.max(highVal, score);
-        bestEl.innerText = highVal;
-    }
-
-    function draw() {
-        if(!alive) return;
-        ctx.clearRect(0,0,canvas.width, canvas.height);
-        ctx.save();
-        ctx.translate(0, -cameraY);
-
-        rows.forEach(row => {
-            const py = row.y * GRID;
-            ctx.fillStyle = row.type === 'grass' ? '#4daa3d' : (row.type === 'road' ? '#333' : (row.type === 'water' ? '#0077be' : '#222'));
-            ctx.fillRect(0, py, canvas.width, GRID);
-            
-            if(row.type === 'rail') {
-                ctx.fillStyle = '#444'; ctx.fillRect(0, py+18, canvas.width, 4);
-            }
-
-            row.entities.forEach(en => {
-                ctx.fillStyle = row.type === 'water' ? '#8b5a2b' : (row.type === 'rail' ? '#eee' : '#ffcc00');
-                ctx.fillRect(en.x, py + 4, en.w, GRID - 8);
-            });
-        });
-
-        // Player
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(player.x * GRID + player.offset + 5, player.y * GRID + 5, GRID-10, GRID-10);
-        
-        ctx.restore();
-        update();
-        requestAnimationFrame(draw);
-    }
-
-    init();
 </script>
 </body>
 </html>
